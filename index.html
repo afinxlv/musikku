@@ -76,13 +76,15 @@ progress{width:100%}
 <section id="cari" class="on">
 <form class="bar" id="fcari">
 <input type="search" id="q" placeholder="Judul lagu atau artis">
-<select id="prov" style="max-width:140px">
-<option value="audius">Audius</option>
+<select id="prov" style="max-width:170px">
+<option value="all">Semua (Jamendo lalu Audius)</option>
 <option value="jamendo">Jamendo</option>
+<option value="audius">Audius</option>
 </select>
 <button class="btn">Cari</button>
 </form>
 <p class="hint">Sumber gratis dan legal. Hanya lagu Jamendo yang mengizinkan unduh untuk offline.</p>
+<label class="hint"><input type="checkbox" id="hideRemix"> Sembunyikan remix, bootleg, dan edit (Audius)</label>
 <div id="hasil" class="list"></div>
 </section>
 
@@ -184,11 +186,20 @@ async function dbDel(k){const d=await db();const x=d.transaction(['meta','blobs'
 
 /* ---------- Sumber musik ---------- */
 const AUD='https://api.audius.co/v1',APP='musikku-pwa';
+const REMIX=/\b(remix|bootleg|mashup|edit|flip|rework|cover|vip|sped\s*up|slowed|nightcore|reverb|mix)\b/i;
+const isRemix=t=>{
+  if(t.remix_of&&t.remix_of.tracks&&t.remix_of.tracks.length)return true;
+  return REMIX.test(String(t.title||'').replace(/original mix|radio edit|album version|extended mix/ig,''));
+};
 async function searchAudius(q){
-  const r=await fetch(`${AUD}/tracks/search?query=${encodeURIComponent(q)}&app_name=${APP}`);
+  const r=await fetch(`${AUD}/tracks/search?query=${encodeURIComponent(q)}&limit=40&app_name=${APP}`);
   if(!r.ok)throw new Error('Audius error '+r.status);
   const j=await r.json();
-  return (j.data||[]).slice(0,20).map(t=>({src:'audius',id:t.id,title:t.title,artist:t.user?.name||'',art:t.artwork?.['150x150']||'',url:`${AUD}/tracks/${t.id}/stream?app_name=${APP}`,canOffline:false}));
+  const all=(j.data||[]).map(t=>({src:'audius',id:t.id,title:t.title,artist:t.user?.name||'',art:t.artwork?.['150x150']||'',url:`${AUD}/tracks/${t.id}/stream?app_name=${APP}`,canOffline:false,verified:!!(t.user&&t.user.is_verified),remix:isRemix(t)}));
+  let list=all;
+  if(store.get('hideRemix',true)&&!REMIX.test(q)){const f=all.filter(x=>!x.remix);if(f.length)list=f}
+  list.sort((a,b)=>(b.verified?1:0)-(a.verified?1:0));
+  return list.slice(0,20);
 }
 async function searchJamendo(q){
   const cid=store.get('jid','');
@@ -199,7 +210,13 @@ async function searchJamendo(q){
   if(j.headers&&j.headers.status==='failed')throw new Error(j.headers.error_message||'Jamendo menolak permintaan');
   return (j.results||[]).map(t=>({src:'jamendo',id:t.id,title:t.name,artist:t.artist_name,art:t.image||t.album_image||'',url:t.audio,dl:t.audiodownload_allowed?t.audiodownload:null,canOffline:!!t.audiodownload_allowed}));
 }
-const searchBy=(p,q)=>p==='jamendo'?searchJamendo(q):searchAudius(q);
+async function searchAll(q){
+  const out=[];
+  if(store.get('jid','')){try{out.push(...await searchJamendo(q))}catch{}}
+  try{out.push(...await searchAudius(q))}catch(e){if(!out.length)throw e}
+  return out;
+}
+const searchBy=(p,q)=>p==='jamendo'?searchJamendo(q):p==='audius'?searchAudius(q):searchAll(q);
 
 /* ---------- Daftar lagu ---------- */
 async function renderList(el,tracks,{rm=false}={}){
@@ -207,8 +224,9 @@ async function renderList(el,tracks,{rm=false}={}){
   const off=await dbKeys();
   el.innerHTML=tracks.length?tracks.map((t,i)=>`<div class="row${cur>=0&&queue[cur]&&key(queue[cur])===key(t)?' now':''}" data-i="${i}">
 <img src="${esc(t.art)}" alt="" onerror="this.style.visibility='hidden'">
-<div class="meta" data-act="play"><b>${esc(t.title)}</b><span>${esc(t.artist)} · ${esc(t.src)}${off.has(key(t))?' · offline':''}${isFinn(t)?' · ★ Finn juga':''}</span></div>
+<div class="meta" data-act="play"><b>${esc(t.title)}</b><span>${esc(t.artist)} · ${esc(t.src)}${t.verified?' ✓':''}${off.has(key(t))?' · offline':''}${isFinn(t)?' · ★ Finn juga':''}</span></div>
 <button data-act="add" title="Tambah ke playlist">＋</button>
+<button data-act="yt" title="Cari di YouTube Music" style="font-size:11px">YT</button>
 ${t.canOffline||off.has(key(t))&&t.src!=='local'?`<button data-act="off" title="Simpan offline">${off.has(key(t))?'✓':'⬇'}</button>`:''}
 ${rm||t.src==='local'?'<button data-act="rm" title="Hapus">✕</button>':''}
 </div>`).join(''):'<p class="empty">Kosong.</p>';
@@ -219,6 +237,7 @@ document.addEventListener('click',async e=>{
   const i=+row.dataset.i,t=el._tracks[i],act=b.dataset.act;
   if(act==='play')play(el._tracks,i);
   else if(act==='add')addToPlaylist(t);
+  else if(act==='yt')window.open('https://music.youtube.com/search?q='+encodeURIComponent(t.title+' '+firstArtist(t.artist)),'_blank','noopener');
   else if(act==='off')toggleOffline(t,el);
   else if(act==='rm')removeItem(t,el,i);
 });
@@ -491,6 +510,8 @@ $('#lyrbtn').onclick=showLyrics;
 $('#lclose').onclick=()=>$('#lyr').close();
 
 /* ---------- Pengaturan ---------- */
+$('#hideRemix').checked=store.get('hideRemix',true);
+$('#hideRemix').onchange=e=>store.set('hideRemix',e.target.checked);
 $('#jid').value=store.get('jid','');
 $('#jsave').onclick=()=>{store.set('jid',$('#jid').value.trim());toast('Tersimpan')};
 
