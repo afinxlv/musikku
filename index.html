@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FP - Finn's Playlist</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#111418">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--bg:#111418;--panel:#1a1f26;--line:#2a313b;--txt:#e8ecf1;--dim:#8d99a8;--acc:#1ed760}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.4 system-ui,sans-serif;padding-bottom:165px}
+header{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);z-index:5}
+h1{font-size:18px;margin:0;padding:12px 16px 4px}
+nav{display:flex;overflow-x:auto;gap:4px;padding:4px 12px 8px}
+nav button{background:none;border:0;color:var(--dim);padding:8px 12px;border-radius:20px;cursor:pointer;font-size:14px;white-space:nowrap}
+nav button.on{background:var(--panel);color:var(--txt)}
+main{max-width:760px;margin:0 auto;padding:12px 16px}
+section{display:none}section.on{display:block}
+input,select,button{font:inherit}
+input[type=text],input[type=search],select{width:100%;background:var(--panel);border:1px solid var(--line);color:var(--txt);padding:10px 12px;border-radius:10px}
+.bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.bar>*{flex:1 1 auto}.bar button{flex:0 0 auto}
+.btn{background:var(--acc);color:#04210e;border:0;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer}
+.btn.alt{background:var(--panel);color:var(--txt);border:1px solid var(--line)}
+.row{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line)}
+.row img{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--panel);flex:0 0 auto}
+.row .meta{flex:1;min-width:0;cursor:pointer}
+.row .meta b,.row .meta span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .meta span{color:var(--dim);font-size:13px}
+.row button{background:none;border:1px solid var(--line);color:var(--txt);width:36px;height:36px;border-radius:50%;cursor:pointer;flex:0 0 auto}
+.row.now{background:#1a2a20}
+.empty,.hint{color:var(--dim)}
+.hint{font-size:13px;margin:8px 0}
+.hint a{color:var(--acc)}
+#player{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);padding:10px 16px;z-index:9}
+#player .in{max-width:760px;margin:0 auto}
+#np{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
+#np span{color:var(--dim);font-size:13px}
+.ctl{display:flex;align-items:center;gap:10px}
+.ctl button{background:none;border:0;color:var(--txt);font-size:22px;cursor:pointer;width:40px;height:40px}
+.ctl #pp{background:var(--acc);color:#04210e;border-radius:50%}
+.ctl input[type=range]{flex:1}
+#vol{max-width:90px;flex:0 1 90px!important}
+.time{font-size:12px;color:var(--dim);min-width:84px;text-align:center}
+dialog{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:14px;padding:18px;width:min(92vw,360px)}
+dialog::backdrop{background:#000a}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:150px;background:#000d;color:#fff;padding:8px 14px;border-radius:20px;font-size:13px;display:none;z-index:20;max-width:90vw}
+progress{width:100%}
+.fb{color:var(--acc);font-size:12px;margin-top:2px}
+#lyr{width:min(94vw,520px);height:80vh;padding:0}
+#lyr[open]{display:flex;flex-direction:column}
+.lh{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.lh b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#lbody{overflow:auto;padding:12px 18px;flex:1;font-size:17px;line-height:1.6}
+.ly{margin:8px 0;color:var(--dim);transition:color .2s}
+.ly.on{color:var(--txt);font-weight:700}
+@media(max-width:520px){#vol{display:none}.time{min-width:70px}}
+</style>
+</head>
+<body>
+<header>
+<h1>🎵 FP <small style="font-weight:400;color:var(--dim);font-size:13px">Finn's Playlist</small></h1>
+<nav id="tabs">
+<button data-t="cari" class="on">Cari</button>
+<button data-t="playlist">Playlist</button>
+<button data-t="pustaka">Pustaka</button>
+<button data-t="impor">Impor Spotify</button>
+<button data-t="set">Pengaturan</button>
+</nav>
+</header>
+
+<main>
+<section id="cari" class="on">
+<form class="bar" id="fcari">
+<input type="search" id="q" placeholder="Judul lagu atau artis">
+<select id="prov" style="max-width:140px">
+<option value="audius">Audius</option>
+<option value="jamendo">Jamendo</option>
+</select>
+<button class="btn">Cari</button>
+</form>
+<p class="hint">Sumber gratis dan legal. Hanya lagu Jamendo yang mengizinkan unduh untuk offline.</p>
+<div id="hasil" class="list"></div>
+</section>
+
+<section id="playlist">
+<div class="bar">
+<select id="plsel"></select>
+<button class="btn alt" id="plnew">+ Baru</button>
+<button class="btn alt" id="plplay">▶ Putar</button>
+<button class="btn alt" id="pldel">Hapus</button>
+<button class="btn alt" id="plexp" hidden>Ekspor daftar lagu Finn</button>
+</div>
+<div id="plist" class="list"></div>
+</section>
+
+<section id="pustaka">
+<div class="bar">
+<button class="btn" id="addlocal">+ Tambah file musik dari perangkat</button>
+<button class="btn alt" id="playall">▶ Putar semua</button>
+</div>
+<input type="file" id="files" accept="audio/*" multiple hidden>
+<p class="hint">Berisi lagu yang kamu simpan offline dan file musik milikmu. Semuanya bisa diputar tanpa internet.</p>
+<div id="lib" class="list"></div>
+</section>
+
+<section id="impor">
+<p>Impor <b>nama playlist</b> dari Spotify (judul dan artis saja, bukan file lagu).</p>
+<ol class="hint">
+<li>Buka <a href="https://exportify.net" target="_blank" rel="noopener">exportify.net</a>, login Spotify, lalu ekspor playlist jadi file CSV.</li>
+<li>Pilih satu atau banyak file CSV di bawah (semua playlist boleh sekaligus).</li>
+<li>Tiap lagu dicarikan padanannya di Audius dan Jamendo.</li>
+</ol>
+<div class="bar"><input type="file" id="csv" accept=".csv,text/csv" multiple></div>
+<progress id="prog" value="0" max="1" hidden></progress>
+<p id="impinfo" class="hint"></p>
+<div id="miss" class="list"></div>
+</section>
+
+<section id="set">
+<p><b>Jamendo client_id</b> (gratis, untuk mencari lagu Jamendo)</p>
+<div class="bar">
+<input type="text" id="jid" placeholder="mis. 1a2b3c4d">
+<button class="btn" id="jsave">Simpan</button>
+</div>
+<p class="hint">Daftar di <a href="https://devportal.jamendo.com" target="_blank" rel="noopener">devportal.jamendo.com</a>, buat aplikasi, lalu salin Client ID. Audius tidak butuh kunci apa pun.</p>
+<p class="hint">Semua data (playlist, lagu offline) tersimpan di browser perangkat ini.</p>
+</section>
+</main>
+
+<div id="player">
+<div class="in">
+<div id="np">Belum ada lagu</div>
+<div class="ctl">
+<button id="prev" aria-label="Sebelumnya">⏮</button>
+<button id="pp" aria-label="Putar/Jeda">▶</button>
+<button id="next" aria-label="Berikutnya">⏭</button>
+<button id="lyrbtn" aria-label="Lirik" title="Lirik">📝</button>
+<input type="range" id="seek" min="0" max="1000" value="0">
+<span class="time" id="time">0:00 / 0:00</span>
+<input type="range" id="vol" min="0" max="1" step="0.01" value="1" aria-label="Volume">
+</div>
+</div>
+</div>
+
+<dialog id="dlg">
+<form method="dialog" id="dform">
+<p><b>Tambah ke playlist</b></p>
+<select id="dsel"></select>
+<p class="hint">atau buat baru:</p>
+<input type="text" id="dnew" placeholder="Nama playlist baru">
+<div class="bar" style="margin-top:14px">
+<button class="btn alt" value="cancel" formnovalidate>Batal</button>
+<button class="btn" value="ok">Tambah</button>
+</div>
+</form>
+</dialog>
+<dialog id="lyr">
+<div class="lh"><b id="lt"></b><button class="btn alt" id="lclose">Tutup</button></div>
+<div id="lbody"></div>
+</dialog>
+<div id="toast"></div>
+<audio id="au" preload="auto"></audio>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store={get(k,d){try{const v=JSON.parse(localStorage.getItem(k));return v??d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){toast('Penyimpanan penuh')}}};
+const key=t=>t.src+':'+t.id;
+let tt;function toast(m){const e=$('#toast');e.textContent=m;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>e.style.display='none',3000)}
+
+/* ---------- IndexedDB (lagu offline + file lokal) ---------- */
+function db(){return new Promise((res,rej)=>{const r=indexedDB.open('musikku',1);r.onupgradeneeded=()=>{r.result.createObjectStore('meta',{keyPath:'key'});r.result.createObjectStore('blobs')};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+const done=t=>new Promise((res,rej)=>{t.oncomplete=()=>res();t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)});
+const req=r=>new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+async function dbPut(t,blob){const d=await db();const x=d.transaction(['meta','blobs'],'readwrite');x.objectStore('meta').put({key:key(t),t:{...t,url:null}});x.objectStore('blobs').put(blob,key(t));return done(x)}
+async function dbBlob(k){const d=await db();return req(d.transaction('blobs').objectStore('blobs').get(k))}
+async function dbKeys(){const d=await db();return new Set(await req(d.transaction('meta').objectStore('meta').getAllKeys()))}
+async function dbMeta(){const d=await db();return (await req(d.transaction('meta').objectStore('meta').getAll())).map(r=>r.t)}
+async function dbDel(k){const d=await db();const x=d.transaction(['meta','blobs'],'readwrite');x.objectStore('meta').delete(k);x.objectStore('blobs').delete(k);return done(x)}
+
+/* ---------- Sumber musik ---------- */
+const AUD='https://api.audius.co/v1',APP='musikku-pwa';
+async function searchAudius(q){
+  const r=await fetch(`${AUD}/tracks/search?query=${encodeURIComponent(q)}&app_name=${APP}`);
+  if(!r.ok)throw new Error('Audius error '+r.status);
+  const j=await r.json();
+  return (j.data||[]).slice(0,20).map(t=>({src:'audius',id:t.id,title:t.title,artist:t.user?.name||'',art:t.artwork?.['150x150']||'',url:`${AUD}/tracks/${t.id}/stream?app_name=${APP}`,canOffline:false}));
+}
+async function searchJamendo(q){
+  const cid=store.get('jid','');
+  if(!cid)throw new Error('Isi Jamendo client_id di Pengaturan dulu');
+  const r=await fetch(`https://api.jamendo.com/v3.0/tracks/?client_id=${encodeURIComponent(cid)}&format=json&limit=20&audioformat=mp32&search=${encodeURIComponent(q)}`);
+  if(!r.ok)throw new Error('Jamendo error '+r.status);
+  const j=await r.json();
+  if(j.headers&&j.headers.status==='failed')throw new Error(j.headers.error_message||'Jamendo menolak permintaan');
+  return (j.results||[]).map(t=>({src:'jamendo',id:t.id,title:t.name,artist:t.artist_name,art:t.image||t.album_image||'',url:t.audio,dl:t.audiodownload_allowed?t.audiodownload:null,canOffline:!!t.audiodownload_allowed}));
+}
+const searchBy=(p,q)=>p==='jamendo'?searchJamendo(q):searchAudius(q);
+
+/* ---------- Daftar lagu ---------- */
+async function renderList(el,tracks,{rm=false}={}){
+  el._tracks=tracks;el._rm=rm;
+  const off=await dbKeys();
+  el.innerHTML=tracks.length?tracks.map((t,i)=>`<div class="row${cur>=0&&queue[cur]&&key(queue[cur])===key(t)?' now':''}" data-i="${i}">
+<img src="${esc(t.art)}" alt="" onerror="this.style.visibility='hidden'">
+<div class="meta" data-act="play"><b>${esc(t.title)}</b><span>${esc(t.artist)} · ${esc(t.src)}${off.has(key(t))?' · offline':''}${isFinn(t)?' · ★ Finn juga':''}</span></div>
+<button data-act="add" title="Tambah ke playlist">＋</button>
+${t.canOffline||off.has(key(t))&&t.src!=='local'?`<button data-act="off" title="Simpan offline">${off.has(key(t))?'✓':'⬇'}</button>`:''}
+${rm||t.src==='local'?'<button data-act="rm" title="Hapus">✕</button>':''}
+</div>`).join(''):'<p class="empty">Kosong.</p>';
+}
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-act]');if(!b)return;
+  const row=b.closest('.row'),el=b.closest('.list');if(!row||!el)return;
+  const i=+row.dataset.i,t=el._tracks[i],act=b.dataset.act;
+  if(act==='play')play(el._tracks,i);
+  else if(act==='add')addToPlaylist(t);
+  else if(act==='off')toggleOffline(t,el);
+  else if(act==='rm')removeItem(t,el,i);
+});
+
+/* ---------- Pemutar ---------- */
+const au=$('#au');let queue=[],cur=-1,objUrl=null;
+async function play(list,i){
+  queue=list.slice();cur=i;await load();
+}
+async function load(){
+  const t=queue[cur];if(!t)return;
+  if(objUrl){URL.revokeObjectURL(objUrl);objUrl=null}
+  let url=t.url;
+  try{const blob=await dbBlob(key(t));if(blob){objUrl=URL.createObjectURL(blob);url=objUrl}}catch{}
+  if(!url){toast('Lagu tidak punya sumber');return}
+  au.src=url;
+  try{await au.play()}catch(e){toast('Gagal memutar. Cek koneksi atau coba lagu lain.')}
+  $('#np').innerHTML=`<b>${esc(t.title)}</b> <span>${esc(t.artist)}</span>${isFinn(t)?'<div class="fb">★ Finn juga mendengarkan lagu ini</div>':''}`;
+  if('mediaSession' in navigator){
+    navigator.mediaSession.metadata=new MediaMetadata({title:t.title,artist:t.artist,artwork:t.art?[{src:t.art}]:[]});
+  }
+  if($('#lyr').open)showLyrics();
+  $$('.list').forEach(l=>l._tracks&&renderList(l,l._tracks,{rm:l._rm}));
+}
+const next=()=>{if(!queue.length)return;cur=(cur+1)%queue.length;load()};
+const prev=()=>{if(!queue.length)return;if(au.currentTime>3){au.currentTime=0;return}cur=(cur-1+queue.length)%queue.length;load()};
+const toggle=()=>{if(!au.src)return;au.paused?au.play():au.pause()};
+$('#pp').onclick=toggle;$('#next').onclick=next;$('#prev').onclick=prev;
+au.onended=next;
+au.onplay=()=>$('#pp').textContent='⏸';
+au.onpause=()=>$('#pp').textContent='▶';
+au.onerror=()=>{if(au.src)toast('Lagu gagal dimuat');};
+const fmt=s=>isFinite(s)?Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0'):'0:00';
+au.ontimeupdate=()=>{syncLyr();if(au.duration)$('#seek').value=au.currentTime/au.duration*1000;$('#time').textContent=fmt(au.currentTime)+' / '+fmt(au.duration)};
+$('#seek').oninput=e=>{if(au.duration)au.currentTime=e.target.value/1000*au.duration};
+$('#vol').oninput=e=>au.volume=e.target.value;
+if('mediaSession' in navigator){
+  navigator.mediaSession.setActionHandler('play',()=>au.play());
+  navigator.mediaSession.setActionHandler('pause',()=>au.pause());
+  navigator.mediaSession.setActionHandler('nexttrack',next);
+  navigator.mediaSession.setActionHandler('previoustrack',prev);
+}
+
+/* ---------- Tab ---------- */
+$('#tabs').onclick=e=>{
+  const b=e.target.closest('button');if(!b)return;
+  $$('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  $$('main section').forEach(s=>s.classList.toggle('on',s.id===b.dataset.t));
+  if(b.dataset.t==='playlist')showPlaylist();
+  if(b.dataset.t==='pustaka')showLib();
+};
+const goTab=n=>$(`#tabs button[data-t=${n}]`).click();
+
+/* ---------- Cari ---------- */
+$('#fcari').onsubmit=async e=>{
+  e.preventDefault();const q=$('#q').value.trim();if(!q)return;
+  const h=$('#hasil');h.innerHTML='<p class="empty">Mencari...</p>';
+  try{const r=await searchBy($('#prov').value,q);await renderList(h,r)}
+  catch(err){h.innerHTML=`<p class="empty">${esc(err.message)}</p>`}
+};
+
+/* ---------- Offline ---------- */
+async function toggleOffline(t,el){
+  const k=key(t),have=(await dbKeys()).has(k);
+  if(have){await dbDel(k);toast('Dihapus dari offline');}
+  else{
+    if(!t.dl){toast('Lagu ini tidak mengizinkan unduhan');return}
+    toast('Mengunduh...');
+    try{
+      const r=await fetch(t.dl);if(!r.ok)throw new Error('HTTP '+r.status);
+      await dbPut(t,await r.blob());toast('Tersimpan untuk offline ✓');
+    }catch(err){toast('Gagal mengunduh: '+err.message);return}
+  }
+  renderList(el,el._tracks,{rm:el._rm});
+}
+async function removeItem(t,el,i){
+  if(el.id==='plist'){
+    const pl=store.get('pl',{}),n=$('#plsel').value;
+    pl[n]=(pl[n]||[]).filter((_,x)=>x!==i);store.set('pl',pl);showPlaylist();return;
+  }
+  if(!confirm('Hapus "'+t.title+'" dari perangkat ini?'))return;
+  await dbDel(key(t));showLib();
+}
+
+/* ---------- Playlist ---------- */
+function plNames(){return Object.keys(store.get('pl',{}))}
+function fillSel(sel,keep){const n=plNames();sel.innerHTML=n.map(x=>`<option>${esc(x)}</option>`).join('');if(keep&&n.includes(keep))sel.value=keep}
+function showPlaylist(){
+  const keep=$('#plsel').value;fillSel($('#plsel'),keep);
+  const n=$('#plsel').value,pl=store.get('pl',{});
+  if(!n){$('#plist').innerHTML='<p class="empty">Belum ada playlist. Tekan "+ Baru" atau tambahkan lagu dari hasil pencarian.</p>';$('#plist')._tracks=[];return}
+  renderList($('#plist'),pl[n]||[],{rm:true});
+}
+$('#plsel').onchange=showPlaylist;
+$('#plnew').onclick=()=>{const n=(prompt('Nama playlist baru:')||'').trim();if(!n)return;const pl=store.get('pl',{});pl[n]=pl[n]||[];store.set('pl',pl);fillSel($('#plsel'),n);showPlaylist()};
+$('#plplay').onclick=()=>{const l=$('#plist')._tracks||[];if(l.length)play(l,0)};
+$('#pldel').onclick=()=>{const n=$('#plsel').value;if(!n||!confirm('Hapus playlist "'+n+'"?'))return;const pl=store.get('pl',{});delete pl[n];store.set('pl',pl);showPlaylist()};
+function addToPlaylist(t){
+  fillSel($('#dsel'));
+  $('#dnew').value='';
+  const d=$('#dlg');d.returnValue='';
+  d.onclose=()=>{
+    if(d.returnValue!=='ok')return;
+    const nn=$('#dnew').value.trim(),n=nn||$('#dsel').value;
+    if(!n){toast('Pilih atau buat playlist dulu');return}
+    const pl=store.get('pl',{});pl[n]=pl[n]||[];
+    if(!pl[n].some(x=>key(x)===key(t)))pl[n].push({...t});
+    store.set('pl',pl);toast('Ditambahkan ke "'+n+'"');
+  };
+  d.showModal();
+}
+
+/* ---------- Pustaka ---------- */
+async function showLib(){const m=await dbMeta();await renderList($('#lib'),m)}
+$('#addlocal').onclick=()=>$('#files').click();
+$('#files').onchange=async e=>{
+  let n=0;
+  for(const f of e.target.files){
+    const t={src:'local',id:crypto.randomUUID(),title:f.name.replace(/\.[^.]+$/,''),artist:'File lokal',art:'',url:null};
+    try{await dbPut(t,f);n++}catch{toast('Gagal menyimpan '+f.name)}
+  }
+  e.target.value='';toast(n+' file ditambahkan');showLib();
+};
+$('#playall').onclick=async()=>{const m=await dbMeta();if(m.length)play(m,0);else toast('Pustaka masih kosong')};
+
+/* ---------- Impor CSV Spotify ---------- */
+function parseCsv(s){
+  const rows=[];let row=[],f='',q=false;
+  for(let i=0;i<s.length;i++){
+    const c=s[i];
+    if(q){if(c==='"'){if(s[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;
+    else if(c===','){row.push(f);f=''}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&s[i+1]==='\n')i++;row.push(f);f='';if(row.some(x=>x!==''))rows.push(row);row=[]}
+    else f+=c;
+  }
+  if(f!==''||row.length){row.push(f);if(row.some(x=>x!==''))rows.push(row)}
+  return rows;
+}
+const norm=s=>String(s).toLowerCase().replace(/\(.*?\)|\[.*?\]/g,'').replace(/\s-\s.*$/,'').replace(/[^\p{L}\p{N} ]/gu,'').replace(/\s+/g,' ').trim();
+async function findMatch(title,artist){
+  const provs=['audius'];if(store.get('jid',''))provs.push('jamendo');
+  for(const p of provs){
+    try{
+      const res=await searchBy(p,(title+' '+artist).trim());
+      const nt=norm(title),na=norm(artist);
+      const m=res.find(t=>norm(t.title)===nt)||res.find(t=>norm(t.title).includes(nt)&&na&&norm(t.artist).includes(na));
+      if(m)return m;
+    }catch{}
+  }
+  return null;
+}
+let allMiss=[];
+async function importFile(f){
+  const rows=parseCsv((await f.text()).replace(/^﻿/,''));
+  if(rows.length<2){toast(f.name+': file kosong');return null}
+  const h=rows.shift().map(x=>x.toLowerCase());
+  const ti=h.findIndex(x=>x.includes('track name')||x==='title'||x==='name'||x==='track');
+  const ai=h.findIndex(x=>x.includes('artist'));
+  if(ti<0){toast(f.name+': kolom judul lagu tidak ditemukan');return null}
+  const name=f.name.replace(/\.csv$/i,''),found=[],miss=[];
+  const prog=$('#prog');prog.hidden=false;prog.max=rows.length;prog.value=0;
+  for(let i=0;i<rows.length;i++){
+    const title=rows[i][ti]||'',artist=ai>=0?firstArtist(rows[i][ai]||''):'';
+    $('#impinfo').textContent=`${name}: mencocokkan ${i+1}/${rows.length} - ${title}`;
+    const m=title?await findMatch(title,artist):null;
+    if(title)tasteAdmin.add(h53(norm(title)+'|'+norm(artist)));
+    if(m)tasteAdmin.add(h53(key(m)));
+    m?found.push(m):miss.push({title,artist});
+    prog.value=i+1;
+    await new Promise(r=>setTimeout(r,150));
+  }
+  prog.hidden=true;
+  if(found.length){const pl=store.get('pl',{});pl[name]=found;store.set('pl',pl)}
+  const ms=store.get('miss',{});ms[name]=miss;store.set('miss',ms);
+  store.set('taste',[...tasteAdmin]);
+  allMiss=allMiss.concat(miss);
+  return {name,found:found.length,miss:miss.length};
+}
+$('#csv').onchange=async e=>{
+  allMiss=[];const sum=[];
+  for(const f of e.target.files){const r=await importFile(f);if(r)sum.push(r)}
+  e.target.value='';
+  $('#impinfo').textContent=sum.length?sum.map(r=>`"${r.name}": ${r.found} cocok, ${r.miss} tidak ditemukan`).join(' · '):'Tidak ada yang berhasil diimpor';
+  $('#miss')._m=allMiss;
+  $('#miss').innerHTML=allMiss.length?'<p class="hint">Tidak ditemukan (ketuk untuk cari manual):</p>'+allMiss.map((m,i)=>`<div class="row" data-m="${i}"><div class="meta"><b>${esc(m.title)}</b><span>${esc(m.artist)}</span></div></div>`).join(''):'';
+};
+$('#miss').onclick=e=>{
+  const r=e.target.closest('[data-m]');if(!r)return;
+  const m=$('#miss')._m[+r.dataset.m];$('#q').value=(m.title+' '+m.artist).trim();goTab('cari');$('#fcari').requestSubmit();
+};
+
+/* ---------- Tanda "Finn juga mendengarkan" ---------- */
+function h53(str,seed=0){let h1=0xdeadbeef^seed,h2=0x41c6ce57^seed;for(let i=0,ch;i<str.length;i++){ch=str.charCodeAt(i);h1=Math.imul(h1^ch,2654435761);h2=Math.imul(h2^ch,1597334677)}h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);return 4294967296*(2097151&h2)+(h1>>>0)}
+function firstArtist(a){return String(a||'').split(/[;,&]|\sfeat\.?\s|\sft\.?\s/i)[0].trim()}
+let taste=new Set();
+const tasteAdmin=new Set(store.get('taste',[]));
+function isFinn(t){return taste.size>0&&(taste.has(h53(norm(t.title)+'|'+norm(firstArtist(t.artist))))||taste.has(h53(key(t))))}
+async function loadTaste(){
+  try{const r=await fetch('finn-taste.json',{cache:'no-cache'});if(!r.ok)return;const j=await r.json();if(j&&Array.isArray(j.keys))taste=new Set(j.keys)}catch{}
+}
+$('#plexp').onclick=()=>{
+  const keys=store.get('taste',[]);
+  if(!keys.length){toast('Impor CSV Spotify dulu');return}
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify({v:1,keys})],{type:'application/json'}));
+  a.download='finn-taste.json';a.click();
+};
+if(location.hash==='#admin')$('#plexp').hidden=false;
+
+/* ---------- Lirik (LRCLIB) ---------- */
+let lyr=null,lyrKey='';
+function parseLrc(l){return l.split('\n').map(r=>{const m=r.match(/^\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)$/);return m?{s:parseInt(m[1],10)*60+parseFloat(m[2]),x:m[3]}:null}).filter(Boolean)}
+async function getLyrics(t){
+  const k=key(t),cache=store.get('lrc',{});
+  if(cache[k])return cache[k];
+  let title=t.title,artist=firstArtist(t.artist);
+  if(t.src==='local'){const p=t.title.split(' - ');if(p.length>1){artist=p[0].trim();title=p.slice(1).join(' - ').trim()}else artist=''}
+  const tries=[];
+  const a=new URLSearchParams({track_name:title});if(artist)a.set('artist_name',artist);
+  tries.push(a,new URLSearchParams({q:(title+' '+artist).trim()}));
+  let found=null;
+  for(let n=0;n<tries.length&&!found;n++){
+    try{
+      const r=await fetch('https://lrclib.net/api/search?'+tries[n]);if(!r.ok)continue;
+      const j=await r.json();
+      const d=au.duration;
+      if(n===0&&isFinite(d))j.sort((x,y)=>Math.abs(x.duration-d)-Math.abs(y.duration-d));
+      found=j.find(x=>x.syncedLyrics)||j.find(x=>x.plainLyrics)||null;
+    }catch{}
+  }
+  if(!found)return {none:true};
+  const res={synced:found.syncedLyrics||'',plain:found.plainLyrics||''};
+  const c=store.get('lrc',{});c[k]=res;
+  const ks=Object.keys(c);if(ks.length>150)delete c[ks[0]];
+  store.set('lrc',c);
+  return res;
+}
+async function showLyrics(){
+  const t=queue[cur];if(!t){toast('Putar lagu dulu');return}
+  const d=$('#lyr');if(!d.open)d.showModal();
+  $('#lt').textContent=t.title+' - '+t.artist;
+  const k=key(t);lyrKey=k;lyr=null;
+  $('#lbody').innerHTML='<p class="hint">Mencari lirik...</p>';
+  const r=await getLyrics(t);
+  if(lyrKey!==k)return;
+  if(r.none){
+    const g='https://www.google.com/search?q='+encodeURIComponent('lirik '+t.title+' '+t.artist);
+    $('#lbody').innerHTML=`<p class="hint">Lirik lagu ini belum ada di database LRCLIB.</p><p><a href="${g}" target="_blank" rel="noopener" style="color:var(--acc)">Cari di web</a></p>`;
+    return;
+  }
+  if(r.synced){
+    const lines=parseLrc(r.synced);lyr={lines};
+    $('#lbody').innerHTML=lines.map((l,i)=>`<p class="ly" data-i="${i}">${esc(l.x)||'♪'}</p>`).join('');
+  }else{
+    lyr=null;$('#lbody').innerHTML=`<p style="white-space:pre-wrap">${esc(r.plain)}</p>`;
+  }
+}
+function syncLyr(){
+  if(!lyr||!$('#lyr').open)return;
+  const tm=au.currentTime+0.3;let idx=-1;
+  for(let i=0;i<lyr.lines.length;i++){if(lyr.lines[i].s<=tm)idx=i;else break}
+  const on=$('#lbody .ly.on');
+  if(on&&+on.dataset.i===idx)return;
+  if(on)on.classList.remove('on');
+  const el=$(`#lbody .ly[data-i="${idx}"]`);
+  if(el){el.classList.add('on');el.scrollIntoView({block:'center',behavior:'smooth'})}
+}
+$('#lyrbtn').onclick=showLyrics;
+$('#lclose').onclick=()=>$('#lyr').close();
+
+/* ---------- Pengaturan ---------- */
+$('#jid').value=store.get('jid','');
+$('#jsave').onclick=()=>{store.set('jid',$('#jid').value.trim());toast('Tersimpan')};
+
+loadTaste();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
