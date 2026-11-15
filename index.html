@@ -42,13 +42,21 @@ input[type=range],input[type=checkbox]{accent-color:#5ab0ff}
 .hero h2{margin:0 0 4px;font-size:22px}
 .hero p{margin:0 0 14px;color:#c9d6ff}
 h3{margin:18px 0 2px;font-size:17px}
-.shelf{display:flex;gap:14px;overflow-x:auto;padding:8px 2px 12px;scroll-snap-type:x proximity;scrollbar-width:thin}
+.shelf{display:flex;gap:14px;overflow-x:auto;padding:8px 2px 12px;scroll-snap-type:x proximity;scrollbar-width:none;-ms-overflow-style:none}
+.shelf::-webkit-scrollbar{display:none}
 .card{flex:0 0 140px;scroll-snap-align:start;cursor:pointer;transition:transform .15s}
 .card:hover{transform:translateY(-3px)}
 .card .cv{width:140px;height:140px;border-radius:18px;overflow:hidden;background:var(--glass2);border:1px solid var(--line);margin-bottom:8px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .card img{width:100%;height:100%;object-fit:cover;display:block}
 .card b,.card span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card span{color:var(--dim);font-size:13px}
+.shh{display:flex;justify-content:space-between;align-items:flex-end;margin-top:18px}
+.shh h3{margin:0}
+.arr{display:flex;gap:6px}
+.arr button{background:var(--glass2);border:1px solid var(--line);color:var(--txt);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1}
+.arr button:hover{border-color:var(--acc)}
+.rk{width:26px;text-align:center;font-weight:700;color:var(--acc2);flex:0 0 auto}
+@media(hover:none){.arr{display:none}}
 .note{border:1px dashed var(--line);border-radius:16px;padding:14px;color:var(--dim);margin:14px 0}
 .note a{color:var(--acc2)}
 .list{border:1px solid var(--line);border-radius:18px;background:var(--glass);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);overflow:hidden}
@@ -226,6 +234,7 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const store={get(k,d){try{const v=JSON.parse(localStorage.getItem(k));return v??d}catch{return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){toast('Penyimpanan penuh')}}};
 const key=t=>t.src+':'+t.id;
+const fmtN=n=>n>=1e6?(n/1e6).toFixed(1).replace('.',',')+' jt':n>=1e3?(n/1e3).toFixed(1).replace('.',',')+' rb':String(n);
 let tt;function toast(m){const e=$('#toast');e.textContent=m;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>e.style.display='none',3000)}
 let queue=[],cur=-1,objUrl=null,infoFromPlayer=false,taste=new Set();
 const au=$('#au');
@@ -252,7 +261,7 @@ const isRemix=t=>{
   if(t.remix_of&&t.remix_of.tracks&&t.remix_of.tracks.length)return true;
   return REMIX.test(String(t.title||'').replace(/original mix|radio edit|album version|extended mix/ig,''));
 };
-const mapAud=t=>({src:'audius',id:t.id,title:t.title,artist:t.user?.name||'',art:t.artwork?.['480x480']||t.artwork?.['150x150']||'',url:`${AUD}/tracks/${t.id}/stream?app_name=${APP}`,canOffline:false,verified:!!(t.user&&t.user.is_verified),remix:isRemix(t)});
+const mapAud=t=>({src:'audius',id:t.id,title:t.title,artist:t.user?.name||'',art:t.artwork?.['480x480']||t.artwork?.['150x150']||'',url:`${AUD}/tracks/${t.id}/stream?app_name=${APP}`,canOffline:false,verified:!!(t.user&&t.user.is_verified),remix:isRemix(t),plays:t.play_count||0});
 const mapJam=t=>({src:'jamendo',id:t.id,title:t.name,artist:t.artist_name,art:t.image||t.album_image||'',url:t.audio,dl:t.audiodownload_allowed?t.audiodownload:null,canOffline:!!t.audiodownload_allowed});
 function cleanAud(list,q){
   if(store.get('hideRemix',true)&&!(q&&REMIX.test(q))){const f=list.filter(x=>!x.remix);if(f.length)return f}
@@ -283,6 +292,13 @@ async function jamFetch(extra){
 }
 const searchJamendo=q=>jamFetch('search='+encodeURIComponent(q));
 const jamNew=()=>store.get('jid','')?jamFetch('order=releasedate_desc'):Promise.resolve([]);
+const jamPop=()=>store.get('jid','')?jamFetch('order=popularity_total'):Promise.resolve([]);
+async function audTop(){
+  const r=await fetch(`${AUD}/tracks/trending?limit=50&time=allTime&app_name=${APP}`);
+  if(!r.ok)throw new Error('Audius error '+r.status);
+  const j=await r.json();
+  return cleanAud((j.data||[]).map(mapAud),'').sort((a,b)=>b.plays-a.plays).slice(0,20);
+}
 async function searchAll(q){
   const out=[];
   if(store.get('jid','')){try{out.push(...await searchJamendo(q))}catch{}}
@@ -299,15 +315,15 @@ async function loadTaste(){
 }
 
 /* ---------- Daftar lagu ---------- */
-async function renderList(el,tracks,{rm=false}={}){
-  el._tracks=tracks;el._rm=rm;
+async function renderList(el,tracks,{rm=false,rank=false}={}){
+  el._tracks=tracks;el._rm=rm;el._rank=rank;
   const off=await dbKeys();
   el.innerHTML=tracks.length?tracks.map((t,i)=>{
     const playing=cur>=0&&queue[cur]&&key(queue[cur])===key(t);
-    const sub=t.linkOnly?'hanya tautan':t.src;
+    const sub=t.linkOnly?'hanya tautan':(rank&&t.plays?fmtN(t.plays)+' putaran':t.src);
     const canOff=t.canOffline||(off.has(key(t))&&t.src!=='local');
     return `<div class="row${playing?' now':''}${t.linkOnly?' dim':''}" data-i="${i}">
-<img src="${esc(t.art)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+${rank?`<div class="rk">${i+1}</div>`:''}<img src="${esc(t.art)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
 <div class="meta" data-act="main"><b>${esc(t.title)}</b><span>${esc(t.artist)} · ${esc(sub)}${t.verified?' ✓':''}${off.has(key(t))?' · offline':''}${isFinn(t)?' · ★ Finn juga':''}</span></div>
 <button data-act="add" title="Tambah ke playlist">＋</button>
 <button data-act="info" title="Detail, lirik, dan tautan">⋯</button>
@@ -318,11 +334,13 @@ ${rm||t.src==='local'?'<button data-act="rm" title="Hapus">✕</button>':''}
 const shelves={};
 function shelfHTML(id,title,tracks,sub){
   shelves[id]=tracks;
-  return `<h3>${esc(title)}</h3>${sub?`<p class="hint" style="margin-top:2px">${esc(sub)}</p>`:''}<div class="shelf" data-shelf="${id}">${tracks.map((t,i)=>`<div class="card" data-i="${i}"><div class="cv"><img src="${esc(t.art)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></div><b>${esc(t.title)}</b><span>${esc(t.artist)}</span></div>`).join('')}</div>`;
+  return `<div class="shw"><div class="shh"><h3>${esc(title)}</h3><div class="arr"><button data-scroll="-1" aria-label="Geser kiri">‹</button><button data-scroll="1" aria-label="Geser kanan">›</button></div></div>${sub?`<p class="hint" style="margin-top:2px">${esc(sub)}</p>`:''}<div class="shelf" data-shelf="${id}">${tracks.map((t,i)=>`<div class="card" data-i="${i}"><div class="cv"><img src="${esc(t.art)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></div><b>${esc(t.title)}</b><span>${esc(t.artist)}</span></div>`).join('')}</div></div>`;
 }
 document.addEventListener('click',async e=>{
   const g=e.target.closest('[data-goto]');
   if(g){e.preventDefault();goTab(g.dataset.goto);return}
+  const sc=e.target.closest('[data-scroll]');
+  if(sc){sc.closest('.shw').querySelector('.shelf').scrollBy({left:+sc.dataset.scroll*300,behavior:'smooth'});return}
   const c=e.target.closest('.card');
   if(c){const sh=c.closest('[data-shelf]');if(sh){play(shelves[sh.dataset.shelf]||[],+c.dataset.i);return}}
   const b=e.target.closest('[data-act]');if(!b)return;
@@ -363,7 +381,7 @@ async function load(){
   }
   remember(t);
   if($('#lyr').open&&infoFromPlayer)showInfo();
-  $$('.list').forEach(l=>l._tracks&&renderList(l,l._tracks,{rm:l._rm}));
+  $$('.list').forEach(l=>l._tracks&&renderList(l,l._tracks,{rm:l._rm,rank:l._rank}));
 }
 const next=()=>{if(!queue.length)return;cur=(cur+1)%queue.length;load()};
 const prev=()=>{if(!queue.length)return;if(au.currentTime>3){au.currentTime=0;return}cur=(cur-1+queue.length)%queue.length;load()};
@@ -434,20 +452,23 @@ const goTab=n=>$(`#tabs button[data-t=${n}]`).click();
 let homeData=null,homeAt=0;
 function renderHome(){
   const hb=$('#homebody');let h='';
-  const rc=store.get('recent',[]);
+  const rc=store.get('recent',[]),d=homeData||{};
   if(rc.length)h+=shelfHTML('recent','Terakhir diputar',rc);
-  const jn=homeData&&homeData.jn,tr=homeData&&homeData.tr;
-  if(jn&&jn.length)h+=shelfHTML('jam','Rilisan terbaru',jn,'Dari Jamendo, musik berlisensi bebas');
-  else if(!store.get('jid',''))h+='<div class="note">Isi Jamendo Client ID di <a href="#" data-goto="set">Pengaturan</a> untuk melihat rilisan terbaru dari Jamendo.</div>';
-  if(tr&&tr.length)h+=shelfHTML('aud','Lagi trending minggu ini',tr,'Dari Audius, musisi independen');
+  if(d.jn&&d.jn.length)h+=shelfHTML('jam','Rilisan terbaru',d.jn,'Dari Jamendo, musik berlisensi bebas');
+  else if(!store.get('jid',''))h+='<div class="note">Isi Jamendo Client ID di <a href="#" data-goto="set">Pengaturan</a> untuk melihat rilisan terbaru dan lagu terpopuler dari Jamendo.</div>';
+  if(d.tr&&d.tr.length)h+=shelfHTML('aud','Lagi trending minggu ini',d.tr,'Dari Audius, musisi independen');
+  if(d.jp&&d.jp.length)h+=shelfHTML('jpop','Terpopuler di Jamendo',d.jp,'Diurutkan dari yang paling banyak didengar');
+  if(d.top&&d.top.length)h+='<div class="shh"><h3>Top 20 paling sering didengar</h3></div><p class="hint" style="margin-top:2px">Dari Audius, diurutkan dari jumlah putaran terbanyak sepanjang masa</p><div id="toplist" class="list"></div>';
   hb.innerHTML=h||'<p class="empty">Belum bisa memuat musik. Cek koneksi internet lalu tekan Segarkan.</p>';
+  if(d.top&&d.top.length)renderList($('#toplist'),d.top,{rank:true});
 }
 async function loadHome(force){
   const stale=!homeData||Date.now()-homeAt>5*60*1000;
   if(!force&&!stale){renderHome();return}
   if(!homeData)$('#homebody').innerHTML='<p class="hint">Memuat musik terbaru...</p>';
-  const [tr,jn]=await Promise.allSettled([audTrending(),jamNew()]);
-  homeData={tr:tr.status==='fulfilled'?tr.value:[],jn:jn.status==='fulfilled'?jn.value:[]};
+  const [tr,jn,top,jp]=await Promise.allSettled([audTrending(),jamNew(),audTop(),jamPop()]);
+  const v=x=>x.status==='fulfilled'?x.value:[];
+  homeData={tr:v(tr),jn:v(jn),top:v(top),jp:v(jp)};
   homeAt=Date.now();renderHome();
 }
 $('#homeref').onclick=()=>loadHome(true);
@@ -472,7 +493,7 @@ async function toggleOffline(t,el){
       await dbPut(t,await r.blob());toast('Tersimpan untuk offline ✓');
     }catch(err){toast('Gagal mengunduh: '+err.message);return}
   }
-  renderList(el,el._tracks,{rm:el._rm});
+  renderList(el,el._tracks,{rm:el._rm,rank:el._rank});
 }
 async function removeItem(t,el,i){
   if(el.id==='plist'){
